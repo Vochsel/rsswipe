@@ -112,7 +112,7 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
     });
   }, []);
 
-  // Track scroll position
+  // Track scroll position - re-run when loading finishes so container exists
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -135,7 +135,7 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
 
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [loadMore]);
+  }, [loadMore, loading]); // Added loading - re-run when loading finishes
 
   if (loading) {
     return (
