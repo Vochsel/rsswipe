@@ -4,6 +4,20 @@ import { FeedItem, FeedSource } from "@/types";
 
 const FEEDS_KEY = "rsswipe_feeds";
 const SAVED_KEY = "rsswipe_saved";
+const SORT_ORDER_KEY = "rsswipe_sort_order";
+
+export type SortOrder = "chronological" | "random";
+
+export function getSortOrder(): SortOrder {
+  if (typeof window === "undefined") return "chronological";
+  const stored = localStorage.getItem(SORT_ORDER_KEY);
+  if (stored === "random") return "random";
+  return "chronological";
+}
+
+export function setSortOrder(order: SortOrder): void {
+  localStorage.setItem(SORT_ORDER_KEY, order);
+}
 
 const DEFAULT_FEEDS: FeedSource[] = [
   { url: "https://hnrss.org/frontpage", title: "Hacker News" },

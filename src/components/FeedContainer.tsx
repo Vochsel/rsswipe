@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { FeedItem as FeedItemType } from "@/types";
 import { FeedItem } from "./FeedItem";
-import { getFeeds } from "@/lib/storage";
+import { getFeeds, getSortOrder } from "@/lib/storage";
 
 const INITIAL_LOAD = 10;
 const LOAD_MORE_COUNT = 10;
@@ -13,13 +13,33 @@ interface FeedContainerProps {
   initialItems?: FeedItemType[];
 }
 
+// Shuffle array using Fisher-Yates algorithm with seed
+function shuffleArray<T>(array: T[], seed: number): T[] {
+  const shuffled = [...array];
+  let currentIndex = shuffled.length;
+
+  // Simple seeded random
+  const seededRandom = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+
+  while (currentIndex > 0) {
+    const randomIndex = Math.floor(seededRandom() * currentIndex);
+    currentIndex--;
+    [shuffled[currentIndex], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[currentIndex]];
+  }
+
+  return shuffled;
+}
+
 export function FeedContainer({ initialItems }: FeedContainerProps) {
   const [allItems, setAllItems] = useState<FeedItemType[]>(initialItems || []);
   const [visibleCount, setVisibleCount] = useState(INITIAL_LOAD);
   const [loading, setLoading] = useState(!initialItems);
   const [error, setError] = useState<string | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
-  const observerRef = useRef<IntersectionObserver | null>(null);
 
   const visibleItems = allItems.slice(0, visibleCount);
   const hasMore = visibleCount < allItems.length;
@@ -51,7 +71,19 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
       }
 
       const data = await response.json();
-      setAllItems(data.items || []);
+      let items = data.items || [];
+
+      // Apply sort order
+      const sortOrder = getSortOrder();
+      if (sortOrder === "random") {
+        // Use today's date as seed so it's consistent for the session
+        const today = new Date();
+        const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+        items = shuffleArray(items, seed);
+      }
+      // chronological is already sorted by the API
+
+      setAllItems(items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load feeds");
     } finally {
@@ -65,40 +97,27 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
     }
   }, [hasMore, allItems.length]);
 
-  // Set up intersection observer for the trigger element
-  const triggerRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-
-      if (node) {
-        observerRef.current = new IntersectionObserver(
-          (entries) => {
-            if (entries[0].isIntersecting && hasMore) {
-              loadMore();
-            }
-          },
-          {
-            root: containerRef.current,
-            rootMargin: "200px",
-            threshold: 0,
-          }
-        );
-        observerRef.current.observe(node);
-      }
-    },
-    [hasMore, loadMore]
-  );
-
-  // Cleanup observer on unmount
+  // Track scroll position and load more when near the end
   useEffect(() => {
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const scrollTop = container.scrollTop;
+      const itemHeight = container.clientHeight; // Each item is 100dvh
+      const newIndex = Math.round(scrollTop / itemHeight);
+
+      setCurrentIndex(newIndex);
+
+      // Load more when within BUFFER_SIZE of the end
+      if (newIndex >= visibleCount - BUFFER_SIZE && hasMore) {
+        loadMore();
       }
     };
-  }, []);
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [visibleCount, hasMore, loadMore]);
 
   if (loading) {
     return (
@@ -147,23 +166,17 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
     );
   }
 
-  // Calculate trigger index (BUFFER_SIZE items before the end)
-  const triggerIndex = visibleItems.length - BUFFER_SIZE;
-
   return (
     <div
       ref={containerRef}
       className="h-[100dvh] w-full overflow-y-scroll snap-y snap-mandatory hide-scrollbar"
     >
-      {visibleItems.map((item, index) => (
-        <div key={item.id}>
-          <FeedItem item={item} />
-          {/* Place invisible trigger element BUFFER_SIZE items before end */}
-          {index === triggerIndex && hasMore && (
-            <div ref={triggerRef} className="absolute" aria-hidden="true" />
-          )}
-        </div>
+      {visibleItems.map((item) => (
+        <FeedItem key={item.id} item={item} />
       ))}
+      {hasMore && (
+        <div className="h-1 w-full" aria-hidden="true" />
+      )}
     </div>
   );
 }

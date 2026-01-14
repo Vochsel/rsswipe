@@ -3,15 +3,17 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { FeedSource } from "@/types";
-import { getFeeds, addFeed, removeFeed } from "@/lib/storage";
+import { getFeeds, addFeed, removeFeed, getSortOrder, setSortOrder, SortOrder } from "@/lib/storage";
 
 export default function SettingsPage() {
   const [feeds, setFeeds] = useState<FeedSource[]>([]);
   const [newFeedUrl, setNewFeedUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [sortOrder, setSortOrderState] = useState<SortOrder>("chronological");
 
   useEffect(() => {
     setFeeds(getFeeds());
+    setSortOrderState(getSortOrder());
   }, []);
 
   const handleAddFeed = (e: React.FormEvent) => {
@@ -37,6 +39,11 @@ export default function SettingsPage() {
   const handleRemoveFeed = (url: string) => {
     const updated = removeFeed(url);
     setFeeds(updated);
+  };
+
+  const handleSortOrderChange = (order: SortOrder) => {
+    setSortOrder(order);
+    setSortOrderState(order);
   };
 
   return (
@@ -69,6 +76,40 @@ export default function SettingsPage() {
       </header>
 
       <div className="px-4 py-6 max-w-lg mx-auto">
+        {/* Sort Order Section */}
+        <section className="mb-8">
+          <h2 className="text-sm font-medium text-white/60 uppercase tracking-wide mb-3">
+            Feed Order
+          </h2>
+          <div className="bg-zinc-900 rounded-xl p-1 flex">
+            <button
+              onClick={() => handleSortOrderChange("chronological")}
+              className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+                sortOrder === "chronological"
+                  ? "bg-white text-black"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              Chronological
+            </button>
+            <button
+              onClick={() => handleSortOrderChange("random")}
+              className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+                sortOrder === "random"
+                  ? "bg-white text-black"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              Random
+            </button>
+          </div>
+          <p className="text-xs text-zinc-500 mt-2 px-1">
+            {sortOrder === "chronological"
+              ? "Newest articles appear first"
+              : "Articles are shuffled daily"}
+          </p>
+        </section>
+
         {/* Add Feed Section */}
         <section className="mb-8">
           <h2 className="text-sm font-medium text-white/60 uppercase tracking-wide mb-3">
