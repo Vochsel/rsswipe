@@ -56,10 +56,10 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
   const hasMore = loadedCount < allItems.length;
   const availableItems = allItems.slice(0, loadedCount);
 
-  // Calculate which items to render (window around current position)
+  // Calculate which items to render
+  // Only virtualize TOP (items scrolled past) - bottom must render for snap points
   const windowStart = Math.max(0, currentIndex - WINDOW_SIZE);
-  const windowEnd = Math.min(availableItems.length, currentIndex + WINDOW_SIZE + 1);
-  const visibleItems = availableItems.slice(windowStart, windowEnd);
+  const visibleItems = availableItems.slice(windowStart); // Render all from windowStart to end
 
   useEffect(() => {
     if (!initialItems) {
@@ -184,10 +184,9 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
     );
   }
 
-  // Calculate spacer heights for virtualization
+  // Calculate top spacer for virtualized items (items scrolled past)
   const itemHeight = typeof window !== "undefined" ? window.innerHeight : 800;
   const topSpacerHeight = windowStart * itemHeight;
-  const bottomSpacerHeight = Math.max(0, (availableItems.length - windowEnd) * itemHeight);
 
   return (
     <div
@@ -199,15 +198,10 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
         <div style={{ height: topSpacerHeight }} aria-hidden="true" />
       )}
 
-      {/* Visible items in the window */}
+      {/* Render all items from windowStart to end - needed for snap points */}
       {visibleItems.map((item) => (
         <FeedItem key={item.id} item={item} />
       ))}
-
-      {/* Bottom spacer for items not yet rendered */}
-      {bottomSpacerHeight > 0 && (
-        <div style={{ height: bottomSpacerHeight }} aria-hidden="true" />
-      )}
     </div>
   );
 }
