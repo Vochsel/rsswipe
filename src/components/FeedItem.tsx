@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
+import { useState, memo, useMemo } from "react";
 import { FeedItem as FeedItemType } from "@/types";
 import { GradientBackground } from "./GradientBackground";
 import { ActionButtons } from "./ActionButtons";
@@ -11,24 +10,25 @@ interface FeedItemProps {
   item: FeedItemType;
 }
 
-export function FeedItem({ item }: FeedItemProps) {
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffHours < 1) return "Just now";
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
+export const FeedItem = memo(function FeedItem({ item }: FeedItemProps) {
   const [showComments, setShowComments] = useState(false);
   const [imageError, setImageError] = useState(false);
 
   const hasMedia = item.media && !imageError;
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffHours < 1) return "Just now";
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  };
+  const formattedDate = useMemo(() => formatDate(item.pubDate), [item.pubDate]);
 
   return (
     <div className="h-[100dvh] w-full relative snap-start flex flex-col">
@@ -42,15 +42,17 @@ export function FeedItem({ item }: FeedItemProps) {
               controls
               playsInline
               muted
+              preload="none"
             />
           ) : (
-            <Image
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
               src={item.media!.url}
               alt={item.title}
-              fill
-              className="object-cover"
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 w-full h-full object-cover"
               onError={() => setImageError(true)}
-              unoptimized
             />
           )
         ) : (
@@ -68,7 +70,7 @@ export function FeedItem({ item }: FeedItemProps) {
           <span className="text-xs font-medium text-white/60 bg-white/10 px-2 py-1 rounded-full">
             {item.feedTitle}
           </span>
-          <span className="text-xs text-white/40">{formatDate(item.pubDate)}</span>
+          <span className="text-xs text-white/40">{formattedDate}</span>
         </div>
 
         {/* Title */}
@@ -126,4 +128,4 @@ export function FeedItem({ item }: FeedItemProps) {
       />
     </div>
   );
-}
+});

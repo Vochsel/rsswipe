@@ -1,18 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { FeedItem as FeedItemType } from "@/types";
 import { FeedItem } from "./FeedItem";
 import { getFeeds } from "@/lib/storage";
+
+const INITIAL_LOAD = 10;
+const LOAD_MORE_COUNT = 10;
+const BUFFER_SIZE = 3;
 
 interface FeedContainerProps {
   initialItems?: FeedItemType[];
 }
 
 export function FeedContainer({ initialItems }: FeedContainerProps) {
-  const [items, setItems] = useState<FeedItemType[]>(initialItems || []);
+  const [allItems, setAllItems] = useState<FeedItemType[]>(initialItems || []);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_LOAD);
   const [loading, setLoading] = useState(!initialItems);
   const [error, setError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  const visibleItems = allItems.slice(0, visibleCount);
+  const hasMore = visibleCount < allItems.length;
 
   useEffect(() => {
     if (!initialItems) {
@@ -41,13 +51,54 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
       }
 
       const data = await response.json();
-      setItems(data.items || []);
+      setAllItems(data.items || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load feeds");
     } finally {
       setLoading(false);
     }
   };
+
+  const loadMore = useCallback(() => {
+    if (hasMore) {
+      setVisibleCount((prev) => Math.min(prev + LOAD_MORE_COUNT, allItems.length));
+    }
+  }, [hasMore, allItems.length]);
+
+  // Set up intersection observer for the trigger element
+  const triggerRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+
+      if (node) {
+        observerRef.current = new IntersectionObserver(
+          (entries) => {
+            if (entries[0].isIntersecting && hasMore) {
+              loadMore();
+            }
+          },
+          {
+            root: containerRef.current,
+            rootMargin: "200px",
+            threshold: 0,
+          }
+        );
+        observerRef.current.observe(node);
+      }
+    },
+    [hasMore, loadMore]
+  );
+
+  // Cleanup observer on unmount
+  useEffect(() => {
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -76,7 +127,7 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
     );
   }
 
-  if (items.length === 0) {
+  if (allItems.length === 0) {
     return (
       <div className="h-[100dvh] w-full flex items-center justify-center bg-black px-4">
         <div className="text-center">
@@ -96,10 +147,22 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
     );
   }
 
+  // Calculate trigger index (BUFFER_SIZE items before the end)
+  const triggerIndex = visibleItems.length - BUFFER_SIZE;
+
   return (
-    <div className="h-[100dvh] w-full overflow-y-scroll snap-y snap-mandatory hide-scrollbar">
-      {items.map((item) => (
-        <FeedItem key={item.id} item={item} />
+    <div
+      ref={containerRef}
+      className="h-[100dvh] w-full overflow-y-scroll snap-y snap-mandatory hide-scrollbar"
+    >
+      {visibleItems.map((item, index) => (
+        <div key={item.id}>
+          <FeedItem item={item} />
+          {/* Place invisible trigger element BUFFER_SIZE items before end */}
+          {index === triggerIndex && hasMore && (
+            <div ref={triggerRef} className="absolute" aria-hidden="true" />
+          )}
+        </div>
       ))}
     </div>
   );
