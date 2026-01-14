@@ -76,8 +76,6 @@ export const FeedItem = memo(function FeedItem({ item }: FeedItemProps) {
         {/* Title */}
         <a
           href={item.link}
-          target="_blank"
-          rel="noopener noreferrer"
           className="block"
         >
           <h2 className="text-xl font-bold leading-tight mb-2 line-clamp-3 hover:underline">
@@ -95,8 +93,6 @@ export const FeedItem = memo(function FeedItem({ item }: FeedItemProps) {
         {/* Read more link */}
         <a
           href={item.link}
-          target="_blank"
-          rel="noopener noreferrer"
           className="inline-flex items-center gap-1 mt-3 text-sm font-medium text-blue-400 hover:text-blue-300"
         >
           Read article
@@ -110,7 +106,7 @@ export const FeedItem = memo(function FeedItem({ item }: FeedItemProps) {
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+              d="M14 5l7 7m0 0l-7 7m7-7H3"
             />
           </svg>
         </a>

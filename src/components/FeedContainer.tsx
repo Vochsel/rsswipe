@@ -8,6 +8,7 @@ import { getFeeds, getSortOrder } from "@/lib/storage";
 const INITIAL_LOAD = 10;
 const LOAD_MORE_COUNT = 10;
 const BUFFER_SIZE = 3;
+const WINDOW_SIZE = 7; // Render this many items before and after current
 
 interface FeedContainerProps {
   initialItems?: FeedItemType[];
@@ -18,7 +19,6 @@ function shuffleArray<T>(array: T[], seed: number): T[] {
   const shuffled = [...array];
   let currentIndex = shuffled.length;
 
-  // Simple seeded random
   const seededRandom = () => {
     seed = (seed * 9301 + 49297) % 233280;
     return seed / 233280;
@@ -35,20 +35,38 @@ function shuffleArray<T>(array: T[], seed: number): T[] {
 
 export function FeedContainer({ initialItems }: FeedContainerProps) {
   const [allItems, setAllItems] = useState<FeedItemType[]>(initialItems || []);
-  const [visibleCount, setVisibleCount] = useState(INITIAL_LOAD);
+  const [loadedCount, setLoadedCount] = useState(INITIAL_LOAD);
   const [loading, setLoading] = useState(!initialItems);
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [itemHeight, setItemHeight] = useState(0);
 
-  const visibleItems = allItems.slice(0, visibleCount);
-  const hasMore = visibleCount < allItems.length;
+  const availableItems = allItems.slice(0, loadedCount);
+  const hasMore = loadedCount < allItems.length;
+
+  // Calculate which items to render (window around current position)
+  const windowStart = Math.max(0, currentIndex - WINDOW_SIZE);
+  const windowEnd = Math.min(availableItems.length, currentIndex + WINDOW_SIZE + 1);
+  const visibleItems = availableItems.slice(windowStart, windowEnd);
 
   useEffect(() => {
     if (!initialItems) {
       fetchFeeds();
     }
   }, [initialItems]);
+
+  // Measure item height on mount
+  useEffect(() => {
+    const updateHeight = () => {
+      if (containerRef.current) {
+        setItemHeight(containerRef.current.clientHeight);
+      }
+    };
+    updateHeight();
+    window.addEventListener("resize", updateHeight);
+    return () => window.removeEventListener("resize", updateHeight);
+  }, []);
 
   const fetchFeeds = async () => {
     setLoading(true);
@@ -73,15 +91,12 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
       const data = await response.json();
       let items = data.items || [];
 
-      // Apply sort order
       const sortOrder = getSortOrder();
       if (sortOrder === "random") {
-        // Use today's date as seed so it's consistent for the session
         const today = new Date();
         const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
         items = shuffleArray(items, seed);
       }
-      // chronological is already sorted by the API
 
       setAllItems(items);
     } catch (err) {
@@ -93,31 +108,32 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
 
   const loadMore = useCallback(() => {
     if (hasMore) {
-      setVisibleCount((prev) => Math.min(prev + LOAD_MORE_COUNT, allItems.length));
+      setLoadedCount((prev) => Math.min(prev + LOAD_MORE_COUNT, allItems.length));
     }
   }, [hasMore, allItems.length]);
 
-  // Track scroll position and load more when near the end
+  // Track scroll position
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || itemHeight === 0) return;
 
     const handleScroll = () => {
       const scrollTop = container.scrollTop;
-      const itemHeight = container.clientHeight; // Each item is 100dvh
       const newIndex = Math.round(scrollTop / itemHeight);
 
-      setCurrentIndex(newIndex);
+      if (newIndex !== currentIndex) {
+        setCurrentIndex(newIndex);
+      }
 
       // Load more when within BUFFER_SIZE of the end
-      if (newIndex >= visibleCount - BUFFER_SIZE && hasMore) {
+      if (newIndex >= loadedCount - BUFFER_SIZE && hasMore) {
         loadMore();
       }
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [visibleCount, hasMore, loadMore]);
+  }, [currentIndex, loadedCount, hasMore, loadMore, itemHeight]);
 
   if (loading) {
     return (
@@ -166,16 +182,28 @@ export function FeedContainer({ initialItems }: FeedContainerProps) {
     );
   }
 
+  // Calculate spacer heights for virtualization
+  const topSpacerHeight = windowStart * itemHeight;
+  const bottomSpacerHeight = Math.max(0, (availableItems.length - windowEnd) * itemHeight);
+
   return (
     <div
       ref={containerRef}
       className="h-[100dvh] w-full overflow-y-scroll snap-y snap-mandatory hide-scrollbar"
     >
+      {/* Top spacer for items scrolled past */}
+      {topSpacerHeight > 0 && (
+        <div style={{ height: topSpacerHeight }} aria-hidden="true" />
+      )}
+
+      {/* Visible items in the window */}
       {visibleItems.map((item) => (
         <FeedItem key={item.id} item={item} />
       ))}
-      {hasMore && (
-        <div className="h-1 w-full" aria-hidden="true" />
+
+      {/* Bottom spacer for items not yet rendered */}
+      {bottomSpacerHeight > 0 && (
+        <div style={{ height: bottomSpacerHeight }} aria-hidden="true" />
       )}
     </div>
   );
